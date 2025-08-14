@@ -73,6 +73,7 @@ Additionally, you may provide convenience top-level fields that will be merged i
 - `ad_name`, `ad_status`, `tracking_specs`, `execution_options`, `adlabels`
 - `ad_copy`, `headline`, `description`, `call_to_action_type`, `page_id`, `link_url` (or `website_url`), `object_story_spec`, `asset_feed_spec`, `instagram_actor_id`
 - Asset helpers: `image_hash` OR provide one of: `image_path`, `image_base64`, `image_url` (we will upload & inject the hash); `video_id` OR `video_path`/`video_url` (we will upload & inject the id)
+- Lead forms: `lead_form_id` to reuse an existing form, or `lead_form` object to create a new one on the Page (requires `page_id`)
 
 Example minimal payload (link ad):
 
@@ -96,35 +97,45 @@ Example minimal payload (link ad):
 }
 ```
 
-Example with image upload helper:
+Example lead-gen ad reusing an existing form:
 
 ```json
 {
-  "objective": "LINK_CLICKS",
-  "ad_set": {"daily_budget": 1500, "targeting": {"geo_locations": {"countries": ["US"]}}},
+  "objective": "LEAD_GENERATION",
+  "ad_set": {"daily_budget": 2000, "targeting": {"geo_locations": {"countries": ["US"]}}},
   "page_id": "<PAGE_ID>",
-  "link_url": "https://example.com",
-  "ad_copy": "Upgrade your workspace",
-  "headline": "Spring Sale",
-  "image_url": "https://example.com/banner.jpg"
+  "lead_form_id": "<LEAD_FORM_ID>",
+  "ad_copy": "Get a free quote",
+  "headline": "Request a demo",
+  "link_url": "https://www.facebook.com/",
+  "call_to_action_type": "LEARN_MORE"
 }
 ```
 
-Example with video upload helper:
+Example lead-gen ad creating a new form on the Page:
 
 ```json
 {
-  "objective": "VIDEO_VIEWS",
-  "ad_set": {"daily_budget": 3000, "optimization_goal": "THRUPLAY"},
+  "objective": "LEAD_GENERATION",
+  "ad_set": {"daily_budget": 2500, "targeting": {"geo_locations": {"countries": ["US"]}}},
   "page_id": "<PAGE_ID>",
-  "ad_copy": "Watch our story",
-  "headline": "Behind the scenes",
-  "video_url": "https://example.com/spot.mp4"
+  "lead_form": {
+    "name": "Demo Request",
+    "follow_up_action_url": "https://example.com/thank-you",
+    "privacy_policy_url": "https://example.com/privacy",
+    "questions": [
+      {"type": "FULL_NAME"},
+      {"type": "EMAIL"}
+    ]
+  },
+  "ad_copy": "Request your demo now",
+  "headline": "Limited spots"
 }
 ```
 
 Notes:
 
-- Any valid Marketing API field can be passed inside the corresponding nested object; we forward it as-is. The helpers only fill reasonable defaults and inject uploaded asset IDs when you provide image/video inputs.
+- For lead forms, the form is created on the `page_id`. You can also pass an existing `lead_form_id` to reuse.
+- We automatically wire the `lead_gen_form_id` into the creative’s call-to-action.
 - All objects are created with status `PAUSED` by default unless you override.
 - To avoid accidental spend, verify budgets and statuses before switching to `ACTIVE`.

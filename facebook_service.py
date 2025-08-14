@@ -17,6 +17,7 @@ try:
     from facebook_business.adobjects.adaccount import AdAccount  # type: ignore
     from facebook_business.adobjects.adimage import AdImage  # type: ignore
     from facebook_business.adobjects.advideo import AdVideo  # type: ignore
+    from facebook_business.adobjects.page import Page  # type: ignore
     _FB_SDK_AVAILABLE = True
 except Exception:
     _FB_SDK_AVAILABLE = False
@@ -69,11 +70,36 @@ def _merge_params(base, override):
     return combined
 
 
+def _is_lead_gen_flow(ad_params: Dict[str, Any]) -> bool:
+    objective = (ad_params.get('objective') or '').upper()
+    return objective == 'LEAD_GENERATION' or 'lead_form_id' in ad_params or 'lead_form' in ad_params
+
+
+def _ensure_lead_form_id(ad_params: Dict[str, Any]) -> str:
+    """
+    Returns an existing lead_form_id or creates one if params provided and SDK/creds are available.
+    """
+    if ad_params.get('lead_form_id'):
+        return ad_params['lead_form_id']
+    lead_form_spec = ad_params.get('lead_form')
+    if not lead_form_spec:
+        return ''
+    if not _can_use_real_facebook():
+        # Cannot create in mock mode
+        return ''
+    page_id = ad_params.get('page_id') or FACEBOOK_PAGE_ID
+    if not page_id:
+        raise Exception('page_id is required to create a lead form')
+    # Create the form on the Page
+    created = Page(page_id).create_leadgen_form(params=lead_form_spec)
+    return created.get('id') or created.get('leadgen_form_id') or ''
+
+
 def _build_campaign_params(ad_params):
     # Defaults
     campaign_params = {
         'name': f"AI Campaign: {ad_params.get('ad_copy', 'Untitled')[:50]}",
-        'objective': ad_params.get('objective') or 'LINK_CLICKS',
+        'objective': ad_params.get('objective') or ('LEAD_GENERATION' if _is_lead_gen_flow(ad_params) else 'LINK_CLICKS'),
         'status': ad_params.get('campaign_status') or 'PAUSED',
         'special_ad_categories': ad_params.get('special_ad_categories') or [],
     }
@@ -96,12 +122,15 @@ def _build_adset_params(ad_params, campaign_id):
     if daily_budget is None and lifetime_budget is None:
         daily_budget = _parse_budget_to_cents(ad_params.get('budget'))
 
+    # Default optimization
+    default_optimization = 'LEAD_GENERATION' if _is_lead_gen_flow(ad_params) else 'REACH'
+
     ad_set_defaults = {
         'name': f"AI Ad Set for {ad_params.get('target_audience', 'default audience')}",
         'campaign_id': campaign_id,
         'billing_event': ad_params.get('billing_event') or 'IMPRESSIONS',
         'status': ad_params.get('adset_status') or 'PAUSED',
-        'optimization_goal': ad_params.get('optimization_goal') or 'REACH',
+        'optimization_goal': ad_params.get('optimization_goal') or default_optimization,
         'pacing_type': ad_params.get('pacing_type') or ['standard'],
     }
     if daily_budget is not None:
@@ -242,6 +271,38 @@ def _maybe_upload_video_and_apply(account: Any, creative_params: Dict[str, Any],
     return creative_params
 
 
+def _apply_leadgen_cta(creative_params: Dict[str, Any], ad_params: Dict[str, Any], lead_form_id: str) -> Dict[str, Any]:
+    """Ensure object_story_spec.link_data.call_to_action is set for lead gen."""
+    if not lead_form_id:
+        return creative_params
+
+    if 'object_story_spec' not in creative_params:
+        creative_params['object_story_spec'] = {}
+    oss = creative_params['object_story_spec']
+
+    # Determine page_id fallback
+    page_id = ad_params.get('page_id') or FACEBOOK_PAGE_ID
+    if page_id and 'page_id' not in oss:
+        oss['page_id'] = page_id
+
+    link_data = oss.get('link_data') or {}
+    link_data.setdefault('message', ad_params.get('ad_copy') or '')
+    link_data.setdefault('link', ad_params.get('link_url') or 'https://www.facebook.com')
+
+    cta_type = ad_params.get('call_to_action_type', 'LEARN_MORE')
+    link_data['call_to_action'] = {
+        'type': cta_type,
+        'value': {
+            'lead_gen_form_id': lead_form_id
+        }
+    }
+    oss['link_data'] = link_data
+    # Ensure we are not mixing video_data when using link_data lead gen
+    if 'video_data' in oss:
+        oss.pop('video_data', None)
+    return creative_params
+
+
 def _build_creative_params(ad_params):
     # Provide a simple default object_story_spec if not provided
     object_story_spec = ad_params.get('object_story_spec') or ad_params.get('creative_object_story_spec')
@@ -283,6 +344,11 @@ def _build_creative_params(ad_params):
     ):
         if key in ad_params and key not in creative_params:
             creative_params[key] = ad_params[key]
+
+    # If lead gen, ensure CTA targets a lead form
+    if _is_lead_gen_flow(ad_params):
+        lead_form_id = ad_params.get('lead_form_id') or ''
+        creative_params = _apply_leadgen_cta(creative_params, ad_params, lead_form_id)
 
     return creative_params
 
@@ -370,10 +436,19 @@ def create_facebook_ad(ad_params):
             elif existing_creative_id:
                 creative_id = existing_creative_id
             else:
+                # Lead form creation if requested
+                lead_form_id = ''
+                if _is_lead_gen_flow(ad_params):
+                    lead_form_id = _ensure_lead_form_id(ad_params)
+                    if lead_form_id:
+                        ad_params['lead_form_id'] = lead_form_id
                 # Creative
                 creative_params = _build_creative_params(ad_params)
                 creative_params = _maybe_upload_image_and_apply(account, creative_params, ad_params)
                 creative_params = _maybe_upload_video_and_apply(account, creative_params, ad_params)
+                # If lead gen with freshly created lead_form_id, ensure CTA is applied
+                if _is_lead_gen_flow(ad_params) and ad_params.get('lead_form_id'):
+                    creative_params = _apply_leadgen_cta(creative_params, ad_params, ad_params['lead_form_id'])
                 creative = account.create_ad_creative(params=creative_params)
                 creative_id = creative.get('id') or creative.get('creative_id')
 
