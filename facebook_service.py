@@ -19,6 +19,9 @@ try:
     from facebook_business.adobjects.advideo import AdVideo  # type: ignore
     from facebook_business.adobjects.page import Page  # type: ignore
     from facebook_business.adobjects.targetingsearch import TargetingSearch  # type: ignore
+    from facebook_business.adobjects.campaign import Campaign  # type: ignore
+    from facebook_business.adobjects.adset import AdSet  # type: ignore
+    from facebook_business.adobjects.ad import Ad  # type: ignore
     _FB_SDK_AVAILABLE = True
 except Exception:
     _FB_SDK_AVAILABLE = False
@@ -942,3 +945,84 @@ def create_facebook_ad(ad_params):
             'creative_id': None,
             'ad_id': None
         }
+
+
+def get_insights(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Fetch insights for account/campaign/adset/ad.
+    Supported keys in params:
+      - level: 'account' | 'campaign' | 'adset' | 'ad'
+      - ids: list of ids for the chosen level (omit for account)
+      - fields: list of metric fields
+      - date_preset or time_range
+      - breakdowns, filtering, time_increment, limit
+    """
+    initialize_facebook_api()
+
+    level = (params.get('level') or 'account').lower()
+    ids = params.get('ids') or []
+    fields = params.get('fields') or [
+        'date_start', 'date_stop', 'impressions', 'spend', 'clicks', 'cpc', 'cpm', 'ctr', 'reach'
+    ]
+    limit = params.get('limit') or 50
+
+    args: Dict[str, Any] = {
+        'fields': ','.join(fields),
+        'limit': limit,
+    }
+
+    # Date range
+    if params.get('date_preset'):
+        args['date_preset'] = params['date_preset']
+    if params.get('time_range'):
+        args['time_range'] = params['time_range']
+
+    # Optional
+    if params.get('breakdowns'):
+        args['breakdowns'] = ','.join(params['breakdowns']) if isinstance(params['breakdowns'], list) else params['breakdowns']
+    if params.get('time_increment'):
+        args['time_increment'] = params['time_increment']
+    if params.get('filtering'):
+        args['filtering'] = params['filtering']
+
+    try:
+        if not _can_use_real_facebook():
+            # Mock response
+            return {
+                'success': True,
+                'level': level,
+                'insights': [
+                    {'date_start': '2025-01-01', 'date_stop': '2025-01-01', 'impressions': '1234', 'spend': '12.34', 'clicks': '56', 'cpc': '0.22', 'cpm': '9.99', 'ctr': '4.53', 'reach': '1100'}
+                ],
+                'message': 'Mock insights',
+            }
+
+        # Real fetch
+        data: List[Dict[str, Any]] = []
+        if level == 'account':
+            account = AdAccount(FACEBOOK_AD_ACCOUNT_ID)
+            for row in account.get_insights(params=args):
+                data.append(dict(row))
+        elif level == 'campaign':
+            for cid in ids:
+                for row in Campaign(str(cid)).get_insights(params=args):
+                    r = dict(row); r['campaign_id'] = str(cid); data.append(r)
+        elif level == 'adset' or level == 'ad_set':
+            for sid in ids:
+                for row in AdSet(str(sid)).get_insights(params=args):
+                    r = dict(row); r['adset_id'] = str(sid); data.append(r)
+        elif level == 'ad':
+            for aid in ids:
+                for row in Ad(str(aid)).get_insights(params=args):
+                    r = dict(row); r['ad_id'] = str(aid); data.append(r)
+        else:
+            return {'success': False, 'message': f'Unsupported insights level: {level}'}
+
+        return {
+            'success': True,
+            'level': level,
+            'count': len(data),
+            'insights': data,
+        }
+    except Exception as e:
+        return {'success': False, 'message': str(e)}

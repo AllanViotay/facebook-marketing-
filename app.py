@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 from ai_service import get_ad_parameters_from_ai
 from facebook_service import create_facebook_ad
+from facebook_service import get_insights
 
 app = Flask(__name__)
 
@@ -39,6 +40,12 @@ def create_ad_advanced():
     payload = request.get_json() or {}
     result = create_facebook_ad(payload)
     return jsonify({'facebook_result': result})
+
+@app.route('/api/insights', methods=['POST'])
+def insights():
+    payload = request.get_json() or {}
+    result = get_insights(payload)
+    return jsonify({'insights_result': result})
 
 
 if __name__ == '__main__':

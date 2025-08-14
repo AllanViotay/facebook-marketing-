@@ -226,3 +226,37 @@ You may also pass a full `targeting` object directly; we forward it as-is.
 ```
 
 The response includes warnings and the fully constructed payloads that would be sent.
+
+## Insights API
+
+Use `POST /api/insights` to fetch performance data.
+
+Payload:
+- `level`: `account` | `campaign` | `adset` | `ad`
+- `ids`: list of ids for the chosen level (omit for `account`)
+- `fields`: array of metric fields (defaults provided)
+- `date_preset` or `time_range` ({"since":"YYYY-MM-DD","until":"YYYY-MM-DD"})
+- Optional: `breakdowns`, `time_increment`, `filtering`, `limit`
+
+Example (account, last 7 days, daily):
+```json
+{
+  "level": "account",
+  "date_preset": "last_7d",
+  "time_increment": 1,
+  "fields": ["date_start","date_stop","spend","impressions","clicks","ctr","cpc","cpm"]
+}
+```
+
+Example (campaign IDs with country breakdown):
+```json
+{
+  "level": "campaign",
+  "ids": ["<CAMPAIGN_ID_1>","<CAMPAIGN_ID_2>"],
+  "date_preset": "last_30d",
+  "breakdowns": ["country"],
+  "fields": ["impressions","spend","reach"]
+}
+```
+
+If SDK/creds are not configured, a mock insights payload is returned for development.
