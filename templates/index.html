@@ -1,74 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Facebook Ad Creator</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>AI Facebook Ad Creator</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <header class="topbar">
-        <div class="container">
-            <div class="branding">
-                <span class="logo" aria-hidden="true">⚡</span>
-                <h1 class="app-title">AI Facebook Ad Creator</h1>
-            </div>
-            <div class="actions">
-                <a class="btn" href="/settings">Settings</a>
-                <button class="btn ghost" type="button" title="Coming soon" disabled>Connect Facebook</button>
-            </div>
-        </div>
-    </header>
+	<header class="topbar">
+		<div class="container">
+			<div class="branding">
+				<span class="logo" aria-hidden="true">⚡</span>
+				<h1 class="app-title">AI Facebook Ad Creator</h1>
+			</div>
+			<div class="actions">
+				<a class="btn" href="/settings">Settings</a>
+				<button class="btn" id="voice-btn" type="button" title="Speak your brief">🎤 Voice</button>
+				<button class="btn ghost" type="button" title="Coming soon" disabled>Connect Facebook</button>
+			</div>
+		</div>
+	</header>
 
-    <main class="container main">
-        <section class="card">
-            <div class="tabs" role="tablist">
-                <button class="tab active" data-tab="basic" role="tab" aria-selected="true">Basic</button>
-                <button class="tab" data-tab="advanced" role="tab" aria-selected="false">Advanced</button>
-            </div>
+	<main class="container main">
+		<section class="card">
+			<div class="tabs" role="tablist">
+				<button class="tab active" data-tab="basic" role="tab" aria-selected="true">Basic</button>
+				<button class="tab" data-tab="advanced" role="tab" aria-selected="false">Advanced</button>
+				<button class="tab" data-tab="insights" role="tab" aria-selected="false">Insights</button>
+			</div>
 
-            <div class="tab-content active" id="tab-basic" role="tabpanel">
-                <form id="ad-form">
-                    <label for="ad-description" class="label">Describe your ad</label>
-                    <textarea id="ad-description" rows="10" placeholder="Describe your ad in natural language...&#10;Example: Create an ad for an audience of young professionals in New York with a budget of 25 dollars. The ad copy should be \"Upgrade your workspace\"."></textarea>
-                    <div class="form-row">
-                        <button type="submit" class="btn primary">Create Ad</button>
-                        <button type="button" id="clear-btn" class="btn">Clear</button>
-                    </div>
-                </form>
-            </div>
+			<div class="tab-content active" id="tab-basic" role="tabpanel">
+				<form id="ad-form">
+					<label for="ad-description" class="label">Describe your ad</label>
+					<textarea id="ad-description" rows="8" placeholder="Describe your ad in natural language or use Voice (🎤)"></textarea>
+					<div class="form-row">
+						<button type="submit" class="btn primary">Create Ad</button>
+						<button type="button" id="clear-btn" class="btn">Clear</button>
+						<button type="button" id="ai-copy-btn" class="btn">AI Copy</button>
+						<button type="button" id="ai-image-btn" class="btn">AI Image</button>
+					</div>
+				</form>
+			</div>
 
-            <div class="tab-content" id="tab-advanced" role="tabpanel" aria-hidden="true">
-                <form id="advanced-form">
-                    <label for="advanced-json" class="label">Advanced JSON payload</label>
-                    <textarea id="advanced-json" rows="16" placeholder='{"campaign": {"name": "Site Traffic", "objective": "LINK_CLICKS"}, "ad_set": {"daily_budget": 2000, "targeting": {"geo_locations": {"countries": ["US"]}}}, "creative": {"object_story_spec": {"page_id": "<PAGE_ID>", "link_data": {"message": "Check this out", "link": "https://example.com"}}}, "ad": {"name": "Ad 1", "status": "PAUSED"}}'></textarea>
-                    <div class="form-row">
-                        <button type="submit" class="btn primary">Create Ad (Advanced)</button>
-                        <button type="button" id="format-json-btn" class="btn">Format JSON</button>
-                        <span class="hint">Tip: add <code>"dry_run": true</code> to preview and validate without creating.</span>
-                    </div>
-                </form>
-            </div>
-        </section>
+			<div class="tab-content" id="tab-advanced" role="tabpanel" aria-hidden="true">
+				<form id="advanced-form">
+					<label for="advanced-json" class="label">Advanced JSON payload</label>
+					<textarea id="advanced-json" rows="14" placeholder='{"campaign": {"name": "Site Traffic", "objective": "LINK_CLICKS"}, "ad_set": {"daily_budget": 2000, "targeting": {"geo_locations": {"countries": ["US"]}}}, "creative": {"object_story_spec": {"page_id": "<PAGE_ID>", "link_data": {"message": "Check this out", "link": "https://example.com"}}}, "ad": {"name": "Ad 1", "status": "PAUSED"}}'></textarea>
+					<div class="form-row">
+						<button type="submit" class="btn primary">Create Ad (Advanced)</button>
+						<button type="button" id="format-json-btn" class="btn">Format JSON</button>
+						<span class="hint">Tip: add <code>"dry_run": true</code> to preview and validate without creating.</span>
+					</div>
+				</form>
+			</div>
 
-        <section class="card" id="results-card" hidden>
-            <div class="card-header">
-                <h3>Result</h3>
-                <div class="right-actions">
-                    <button class="btn small" id="copy-result-btn" type="button">Copy JSON</button>
-                </div>
-            </div>
-            <div id="result" class="result"></div>
-        </section>
-    </main>
+			<div class="tab-content" id="tab-insights" role="tabpanel" aria-hidden="true">
+				<form id="insights-form">
+					<label class="label">Analyze and suggest better copy</label>
+					<div class="form-row">
+						<select id="insights-level" class="input">
+							<option value="account">Account</option>
+							<option value="campaign">Campaign</option>
+							<option value="adset">Ad Set</option>
+							<option value="ad">Ad</option>
+						</select>
+						<input id="insights-ids" class="input" placeholder="Comma-separated IDs (for campaign/adset/ad)">
+						<select id="insights-preset" class="input">
+							<option value="last_7d">Last 7d</option>
+							<option value="last_30d">Last 30d</option>
+							<option value="yesterday">Yesterday</option>
+							<option value="today">Today</option>
+						</select>
+						<button type="submit" class="btn primary">Analyze</button>
+					</div>
+				</form>
+			</div>
+		</section>
 
-    <div id="toast" class="toast" role="status" hidden></div>
+		<section class="card" id="results-card" hidden>
+			<div class="card-header">
+				<h3>Result</h3>
+				<div class="right-actions">
+					<button class="btn small" id="copy-result-btn" type="button">Copy JSON</button>
+				</div>
+			</div>
+			<div id="result" class="result"></div>
+		</section>
+	</main>
 
-    <div id="backdrop" class="backdrop" hidden>
-        <div class="spinner" aria-hidden="true"></div>
-        <p>Working...</p>
-    </div>
+	<div id="toast" class="toast" role="status" hidden></div>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+	<div id="backdrop" class="backdrop" hidden>
+		<div class="spinner" aria-hidden="true"></div>
+		<p>Working...</p>
+	</div>
+
+	<script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

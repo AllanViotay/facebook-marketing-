@@ -71,6 +71,63 @@ def generate_ad_image(prompt: str, size: str = "1024x1024", n: int = 1) -> dict:
         return {"error": str(e)}
 
 
+def analyze_insights_and_suggest_copy(insights: dict, context: dict = None) -> dict:
+    """
+    Analyzes insights and suggests improvements with new copy ideas.
+    If OpenAI is not configured, uses a heuristic fallback based on CTR/CPC.
+    """
+    context = context or {}
+    rows = insights.get('insights') or insights.get('data') or []
+    if not (OPENAI_API_KEY and _OPENAI_AVAILABLE):
+        # Heuristic: pick row with highest CTR if available
+        def parse_float(x):
+            try:
+                return float(str(x))
+            except Exception:
+                return 0.0
+        best = None
+        best_ctr = -1.0
+        for r in rows:
+            ctr = parse_float(r.get('ctr'))
+            if ctr > best_ctr:
+                best_ctr = ctr
+                best = r
+        summary = {
+            'top_ctr': best_ctr,
+            'top_row': best
+        }
+        suggestions = [
+            'Emphasize the primary benefit earlier and add a time-bound CTA.',
+            'Test a shorter headline and stronger verb (Shop, Get, Book).',
+            'Try a 1:1 image variant with clear product focus.'
+        ]
+        copies = [
+            f"Upgrade your workspace today—save time and feel better. Shop now.",
+            f"Transform your desk in minutes. Limited offer—Get yours now.",
+        ]
+        return {'summary': summary, 'recommendations': suggestions, 'copy_variations': copies}
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    sys = (
+        "You are a senior performance marketer. Analyze Facebook Ads insights JSON and produce: "
+        "1) a brief summary of what worked/what underperformed, 2) 3 tactical recommendations, "
+        "3) 3 improved ad copy variations tailored to the findings. Output strict JSON with keys: "
+        "summary (string), recommendations (string[]), copy_variations (string[])."
+    )
+    user = json.dumps({'insights': rows, 'context': context}, ensure_ascii=False)
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.4,
+        messages=[{"role":"system","content":sys},{"role":"user","content":user}],
+    )
+    content = resp.choices[0].message.content or '{}'
+    try:
+        out = json.loads(content)
+    except Exception:
+        out = {'summary': content.strip(), 'recommendations': [], 'copy_variations': []}
+    return out
+
+
 def get_ad_parameters_from_ai(description):
     """
     Main function to get ad parameters from a description.

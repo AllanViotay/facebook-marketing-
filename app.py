@@ -5,7 +5,7 @@ from facebook_service import get_insights
 from ai_service import update_runtime_openai_key
 from facebook_service import update_runtime_facebook_creds, get_runtime_facebook_creds
 from settings_persistence import save_to_config_py
-from ai_service import generate_ad_copy, generate_ad_image
+from ai_service import generate_ad_copy, generate_ad_image, analyze_insights_and_suggest_copy
 
 app = Flask(__name__)
 
@@ -66,6 +66,16 @@ def ai_image():
         n=int(payload.get('n') or 1),
     )
     return jsonify({'result': res})
+
+@app.route('/api/ai/insights-suggest', methods=['POST'])
+def ai_insights_suggest():
+    payload = request.get_json() or {}
+    # Either provide insights directly or fetch via our insights endpoint-like payload
+    insights = payload.get('insights')
+    if not insights and payload.get('fetch'):
+        insights = get_insights(payload.get('fetch') or {})
+    suggestions = analyze_insights_and_suggest_copy(insights or {}, context=payload.get('context') or {})
+    return jsonify({'result': suggestions})
 
 @app.route('/api/create-ad', methods=['POST'])
 def create_ad():
