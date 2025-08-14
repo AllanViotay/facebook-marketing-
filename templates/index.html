@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Facebook Ad Creator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>AI Facebook Ad Creator</h1>
+    <form id="ad-form">
+        <textarea id="ad-description" rows="10" cols="50" placeholder="Describe your ad in natural language..."></textarea>
+        <br>
+        <button type="submit">Create Ad</button>
+    </form>
+    <div id="result"></div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
