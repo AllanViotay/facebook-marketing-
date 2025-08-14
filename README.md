@@ -176,3 +176,53 @@ Example combining helpers:
 ```
 
 You may also pass a full `targeting` object directly; we forward it as-is.
+
+## Advanced creative/format helpers
+
+- Instant Experience (Canvas):
+  - Provide `instant_experience_id` (or `canvas_id`) to attach an IX to the creative CTA value.
+- Collection/DPA helpers:
+  - Provide `product_set_id` and optional `creative_flexible_spec` (images/videos/bodies/titles/descriptions/link_urls/call_to_action_types) to auto-build `asset_feed_spec`.
+  - Or pass `retailer_item_ids` for curated sets.
+- Use existing post: `object_story_id` to turn a Page post into an ad.
+- Carousel helper: `carousel_items` array with per-card `name`, `description`, link/CTA, and auto image uploads.
+- App ads helpers: `app_link`/`deep_link` auto-injected as CTA value.
+- WhatsApp helper: `whatsapp_number` sets CTA type/value for WhatsApp messaging.
+
+## Placement and media guidance
+
+- We surface warnings for incompatible media specs per placement (e.g., Reels/Stories prefer 9:16 and Reels <= 90s).
+- You can optionally pass `media_aspect_ratio` and `video_duration_seconds` to enable richer validation.
+- Set placements via `publisher_platforms` and `facebook_positions`/`instagram_positions`/`messenger_positions`/`audience_network_positions`.
+
+## Catalog/Advantage+ notes
+
+- For catalog sales, pass `product_set_id` and optional `asset_feed_spec`/`creative_flexible_spec`.
+- Advantage+ Catalog and creative toggles can be set via ad set/campaign fields; any official fields you pass through are forwarded unchanged.
+
+## Compliance
+
+- EU DSA helpers: `dsa_beneficiary`, `dsa_payor` on the ad set.
+- Political and other regional disclaimers are supported via pass-through fields you supply; we forward them as-is.
+
+## Validation and dry runs
+
+- Basic enum checks surface warnings for `objective`, `billing_event`, `optimization_goal`, and CTA types.
+- Placement/media checks emit warnings; set `strict_validation: true` to raise errors instead.
+- Pass `dry_run: true` to validate and receive built `campaign_params`, `ad_set_params`, `creative_params`, and `ad_params` without creating anything.
+
+### Dry run example
+
+```json
+{
+  "objective": "TRAFFIC",
+  "publisher_platforms": ["instagram"],
+  "instagram_positions": ["reels"],
+  "media_aspect_ratio": "4:5",
+  "video_duration_seconds": 120,
+  "dry_run": true,
+  "strict_validation": false
+}
+```
+
+The response includes warnings and the fully constructed payloads that would be sent.

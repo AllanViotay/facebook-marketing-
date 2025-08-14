@@ -26,6 +26,177 @@ except Exception:
 import base64
 from typing import Dict, Any, List, Optional
 
+# Enumerations for light validation
+_ALLOWED_OBJECTIVES = {
+    'BRAND_AWARENESS', 'REACH', 'TRAFFIC', 'ENGAGEMENT', 'APP_INSTALLS',
+    'VIDEO_VIEWS', 'LEAD_GENERATION', 'CONVERSIONS', 'CATALOG_SALES', 'MESSAGES'
+}
+_ALLOWED_BILLING_EVENTS = {'IMPRESSIONS', 'LINK_CLICKS', 'APP_INSTALLS', 'REACH'}
+_ALLOWED_OPT_GOALS = {
+    'REACH', 'LINK_CLICKS', 'LEAD_GENERATION', 'THRUPLAY', 'IMPRESSIONS',
+    'OFFSITE_CONVERSIONS', 'CLICKS', 'QUALITY_LEAD'
+}
+_ALLOWED_CTA_TYPES = {
+    'LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'DOWNLOAD', 'APPLY_NOW', 'BOOK_TRAVEL',
+    'CONTACT_US', 'CALL_NOW', 'GET_OFFER', 'SUBSCRIBE', 'WHATSAPP_MESSAGE',
+    'USE_APP', 'OPEN_LINK', 'GET_DIRECTIONS', 'GET_QUOTE', 'GET_SHOWTIMES'
+}
+_ALLOWED_ASPECT_RATIOS = {'1:1', '4:5', '9:16', '16:9'}
+
+
+def _add_warning(warnings: List[str], msg: str):
+    warnings.append(msg)
+
+
+def _validate_enums(ad_params: Dict[str, Any], ad_set_params: Dict[str, Any], creative_params: Dict[str, Any], warnings: List[str], strict: bool):
+    obj = (ad_params.get('objective') or ad_set_params.get('objective'))
+    if obj and obj not in _ALLOWED_OBJECTIVES:
+        msg = f"Unknown objective '{obj}'."
+        if strict:
+            raise Exception(msg)
+        _add_warning(warnings, msg)
+
+    be = ad_set_params.get('billing_event')
+    if be and be not in _ALLOWED_BILLING_EVENTS:
+        msg = f"Potentially invalid billing_event '{be}'."
+        if strict:
+            raise Exception(msg)
+        _add_warning(warnings, msg)
+
+    og = ad_set_params.get('optimization_goal')
+    if og and og not in _ALLOWED_OPT_GOALS:
+        msg = f"Potentially invalid optimization_goal '{og}'."
+        if strict:
+            raise Exception(msg)
+        _add_warning(warnings, msg)
+
+    # CTA type validation
+    cta_type = ad_params.get('call_to_action_type') or creative_params.get('call_to_action_type')
+    if cta_type and cta_type not in _ALLOWED_CTA_TYPES:
+        msg = f"Potentially invalid call_to_action_type '{cta_type}'."
+        if strict:
+            raise Exception(msg)
+        _add_warning(warnings, msg)
+
+    # Aspect ratio checks when provided
+    mar = ad_params.get('media_aspect_ratio')
+    if mar and mar not in _ALLOWED_ASPECT_RATIOS:
+        msg = f"Unknown media_aspect_ratio '{mar}'."
+        if strict:
+            raise Exception(msg)
+        _add_warning(warnings, msg)
+
+
+def _validate_media_spec_for_placements(ad_params: Dict[str, Any], ad_set_params: Dict[str, Any], warnings: List[str], strict: bool):
+    placements = set()
+    targeting = ad_set_params.get('targeting') or {}
+    for key in ('facebook_positions', 'instagram_positions', 'messenger_positions', 'audience_network_positions'):
+        for v in (targeting.get(key) or []):
+            placements.add(v)
+
+    mar = ad_params.get('media_aspect_ratio')
+    video_secs = ad_params.get('video_duration_seconds')
+
+    if 'story' in placements or 'stories' in placements:
+        if mar and mar != '9:16':
+            msg = "Stories placement prefers 9:16 aspect ratio."
+            if strict:
+                raise Exception(msg)
+            _add_warning(warnings, msg)
+    if 'reels' in placements:
+        if mar and mar != '9:16':
+            msg = "Reels placement prefers 9:16 aspect ratio."
+            if strict:
+                raise Exception(msg)
+            _add_warning(warnings, msg)
+        if video_secs and video_secs > 90:
+            msg = "Reels videos should be <= 90 seconds."
+            if strict:
+                raise Exception(msg)
+            _add_warning(warnings, msg)
+
+
+def _apply_app_deep_link_to_cta(creative_params: Dict[str, Any], ad_params: Dict[str, Any]):
+    app_link = ad_params.get('app_link') or ad_params.get('deep_link')
+    if not app_link:
+        return creative_params
+    oss = creative_params.get('object_story_spec', {})
+    link_data = oss.get('link_data', {})
+    cta = link_data.get('call_to_action', {})
+    value = cta.get('value', {})
+    value['app_link'] = app_link
+    cta['value'] = value
+    if not cta.get('type'):
+        cta['type'] = ad_params.get('call_to_action_type') or 'USE_APP'
+    link_data['call_to_action'] = cta
+    oss['link_data'] = link_data
+    creative_params['object_story_spec'] = oss
+    return creative_params
+
+
+def _apply_whatsapp_cta(creative_params: Dict[str, Any], ad_params: Dict[str, Any]):
+    number = ad_params.get('whatsapp_number')
+    if not number:
+        return creative_params
+    oss = creative_params.get('object_story_spec', {})
+    link_data = oss.get('link_data', {})
+    cta = link_data.get('call_to_action', {})
+    value = cta.get('value', {})
+    value['app_destination'] = 'WHATSAPP'
+    value['whatsapp_number'] = str(number)
+    cta['value'] = value
+    if not cta.get('type'):
+        cta['type'] = 'WHATSAPP_MESSAGE'
+    link_data['call_to_action'] = cta
+    oss['link_data'] = link_data
+    creative_params['object_story_spec'] = oss
+    return creative_params
+
+
+def _apply_instant_experience(creative_params: Dict[str, Any], ad_params: Dict[str, Any]):
+    ix_id = ad_params.get('instant_experience_id') or ad_params.get('canvas_id')
+    if not ix_id:
+        return creative_params
+    oss = creative_params.get('object_story_spec', {})
+    link_data = oss.get('link_data', {})
+    cta = link_data.get('call_to_action', {})
+    value = cta.get('value', {})
+    # Keep key name explicit to avoid incorrect nesting
+    value['instant_experience_id'] = ix_id
+    cta['value'] = value
+    if not cta.get('type'):
+        cta['type'] = ad_params.get('call_to_action_type') or 'LEARN_MORE'
+    link_data['call_to_action'] = cta
+    oss['link_data'] = link_data
+    creative_params['object_story_spec'] = oss
+    return creative_params
+
+
+def _apply_collection_dpa_helpers(creative_params: Dict[str, Any], ad_params: Dict[str, Any]):
+    # Product catalog
+    if ad_params.get('product_set_id') and 'asset_feed_spec' not in creative_params:
+        flex = ad_params.get('creative_flexible_spec') or {}
+        asset_feed_spec: Dict[str, Any] = {
+            'images': flex.get('images'),
+            'videos': flex.get('videos'),
+            'bodies': flex.get('bodies'),
+            'titles': flex.get('titles'),
+            'descriptions': flex.get('descriptions'),
+            'link_urls': flex.get('link_urls'),
+            'call_to_action_types': flex.get('call_to_action_types'),
+            'product_set_id': ad_params['product_set_id'],
+        }
+        # Remove None entries
+        asset_feed_spec = {k: v for k, v in asset_feed_spec.items() if v}
+        if asset_feed_spec:
+            creative_params['asset_feed_spec'] = asset_feed_spec
+
+    # Retailer item IDs passthrough for curated sets
+    if ad_params.get('retailer_item_ids') and 'retailer_item_ids' not in creative_params:
+        creative_params['retailer_item_ids'] = ad_params['retailer_item_ids']
+
+    return creative_params
+
 
 def _can_use_real_facebook():
     return (
@@ -566,6 +737,18 @@ def _build_creative_params(ad_params):
         if key in ad_params and key not in creative_params:
             creative_params[key] = ad_params[key]
 
+    # Lead gen CTA wiring when provided earlier remains
+
+    # App deep link and WhatsApp CTA helpers
+    creative_params = _apply_app_deep_link_to_cta(creative_params, ad_params)
+    creative_params = _apply_whatsapp_cta(creative_params, ad_params)
+
+    # Instant Experience (Canvas) helper
+    creative_params = _apply_instant_experience(creative_params, ad_params)
+
+    # Collection/DPA helpers
+    creative_params = _apply_collection_dpa_helpers(creative_params, ad_params)
+
     return creative_params
 
 
@@ -610,6 +793,10 @@ def create_facebook_ad(ad_params):
     try:
         initialize_facebook_api()
 
+        warnings: List[str] = []
+        strict_validation = bool(ad_params.get('strict_validation'))
+        dry_run = bool(ad_params.get('dry_run'))
+
         campaign_id = None
         ad_set_id = None
         creative_id = None
@@ -618,9 +805,38 @@ def create_facebook_ad(ad_params):
         # Build params
         campaign_params = _build_campaign_params(ad_params)
 
+        # Pre-build ad set and creative for validation when dry_run
+        ad_set_params_preview = None
+        creative_params_preview = None
+
+        if dry_run or _can_use_real_facebook():
+            # Build ad set params for validation/media checks
+            ad_set_params_preview = _build_adset_params(ad_params, campaign_id or 'act_preview')
+            # Build creative params for validation/media checks
+            creative_params_preview = _build_creative_params(ad_params)
+
+            # Validate enums and media spec
+            _validate_enums(ad_params, ad_set_params_preview, creative_params_preview, warnings, strict_validation)
+            _validate_media_spec_for_placements(ad_params, ad_set_params_preview, warnings, strict_validation)
+
+        if dry_run:
+            return {
+                'success': True,
+                'message': 'Dry run: validated parameters only',
+                'campaign_params': campaign_params,
+                'ad_set_params': ad_set_params_preview,
+                'creative_params': creative_params_preview,
+                'ad_params': _build_ad_params(ad_params, 'preview_adset', None),
+                'warnings': warnings,
+            }
+
         if _can_use_real_facebook():
             account = AdAccount(FACEBOOK_AD_ACCOUNT_ID)
             # Campaign
+            execution_options = []
+            if ad_params.get('execution_options'):
+                execution_options = ad_params['execution_options']
+            # Create campaign
             campaign = account.create_campaign(params=campaign_params)
             campaign_id = campaign.get('id') or campaign.get('campaign_id')
 
@@ -702,17 +918,27 @@ def create_facebook_ad(ad_params):
 
         print(f"--- Facebook Ad Creation Finished ---")
 
-        return {
-            "success": True,
-            "message": (
-                "Created Facebook campaign, ad set, creative, and ad." if _can_use_real_facebook() else "Successfully simulated creating a Facebook ad."
+        result: Dict[str, Any] = {
+            'success': True,
+            'message': (
+                'Created Facebook campaign, ad set, creative, and ad.' if _can_use_real_facebook() else 'Successfully simulated creating a Facebook ad.'
             ),
-            "campaign_id": campaign_id,
-            "ad_set_id": ad_set_id,
-            "creative_id": creative_id,
-            "ad_id": ad_id,
+            'campaign_id': campaign_id,
+            'ad_set_id': ad_set_id,
+            'creative_id': creative_id,
+            'ad_id': ad_id,
         }
+        if warnings:
+            result['warnings'] = warnings
+        return result
 
     except Exception as e:
         print(f"An error occurred during Facebook ad creation: {e}")
-        return {"success": False, "message": str(e), "campaign_id": None, "ad_set_id": None, "creative_id": None, "ad_id": None}
+        return {
+            'success': False,
+            'message': str(e),
+            'campaign_id': None,
+            'ad_set_id': None,
+            'creative_id': None,
+            'ad_id': None
+        }
