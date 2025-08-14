@@ -23,7 +23,7 @@ except Exception:
     _FB_SDK_AVAILABLE = False
 
 import base64
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 
 def _can_use_real_facebook():
@@ -167,11 +167,12 @@ def _build_adset_params(ad_params, campaign_id):
     if 'promoted_object' in ad_params:
         ad_set_defaults['promoted_object'] = ad_params['promoted_object']
 
-    # Frequency control, attribution, etc. (pass-through if present)
+    # Regulatory/compliance and advanced toggles
     passthrough_keys = [
         'is_autobid', 'attribution_spec', 'destination_type', 'daily_imps',
         'targeting_optimization_types', 'rf_prediction_id', 'contextual_bundling_spec',
-        'adset_schedule', 'time_series', 'line_number', 'budget_remaining'
+        'adset_schedule', 'time_series', 'line_number', 'budget_remaining',
+        'is_dynamic_creative', 'dsa_beneficiary', 'dsa_payor', 'multi_advertiser_ads_opt_in'
     ]
     for k in passthrough_keys:
         if k in ad_params:
@@ -290,9 +291,11 @@ def _apply_leadgen_cta(creative_params: Dict[str, Any], ad_params: Dict[str, Any
     link_data.setdefault('link', ad_params.get('link_url') or 'https://www.facebook.com')
 
     cta_type = ad_params.get('call_to_action_type', 'LEARN_MORE')
+    cta_value = ad_params.get('call_to_action_value') or {}
     link_data['call_to_action'] = {
         'type': cta_type,
         'value': {
+            **cta_value,
             'lead_gen_form_id': lead_form_id
         }
     }
@@ -303,9 +306,97 @@ def _apply_leadgen_cta(creative_params: Dict[str, Any], ad_params: Dict[str, Any
     return creative_params
 
 
+def _build_carousel_link_data(account: Optional[Any], ad_params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = ad_params.get('carousel_items') or []
+    if not items:
+        return None
+
+    message = ad_params.get('ad_copy') or ''
+    top_link = ad_params.get('link_url') or 'https://www.facebook.com'
+    child_attachments: List[Dict[str, Any]] = []
+
+    for item in items:
+        att: Dict[str, Any] = {}
+        att['link'] = item.get('link') or top_link
+        if item.get('name'):
+            att['name'] = item['name']
+        if item.get('description'):
+            att['description'] = item['description']
+        # CTA per card
+        cta_type = item.get('call_to_action_type')
+        cta_value = item.get('call_to_action_value') or ({'link': att['link']} if att.get('link') else {})
+        if cta_type:
+            att['call_to_action'] = {'type': cta_type, 'value': cta_value}
+
+        # Image handling
+        if item.get('image_hash'):
+            att['image_hash'] = item['image_hash']
+        else:
+            # Try to upload if account present and image provided
+            if account and (item.get('image_path') or item.get('image_url') or item.get('image_base64')):
+                try:
+                    if item.get('image_path'):
+                        created = account.create_ad_image(params={'filename': item['image_path']})
+                        image_hash = created['images'][0]['hash'] if 'images' in created else created.get('hash')
+                        if image_hash:
+                            att['image_hash'] = image_hash
+                    elif item.get('image_base64'):
+                        raw = base64.b64decode(item['image_base64'])
+                        created = account.create_ad_image(params={'bytes': raw})
+                        image_hash = created.get('hash')
+                        if image_hash:
+                            att['image_hash'] = image_hash
+                    elif item.get('image_url'):
+                        import requests
+                        resp = requests.get(item['image_url'], timeout=20)
+                        resp.raise_for_status()
+                        created = account.create_ad_image(params={'bytes': resp.content})
+                        image_hash = created.get('hash')
+                        if image_hash:
+                            att['image_hash'] = image_hash
+                except Exception:
+                    pass
+        child_attachments.append(att)
+
+    link_data: Dict[str, Any] = {
+        'message': message,
+        'link': top_link,
+        'child_attachments': child_attachments,
+    }
+    # Optional carousel flags
+    if 'multi_share_optimized' in ad_params:
+        link_data['multi_share_optimized'] = ad_params['multi_share_optimized']
+    if 'multi_share_end_card' in ad_params:
+        link_data['multi_share_end_card'] = ad_params['multi_share_end_card']
+
+    return link_data
+
+
 def _build_creative_params(ad_params):
+    # If using an existing post, honor object_story_id
+    object_story_id = ad_params.get('object_story_id') or (ad_params.get('creative') or {}).get('object_story_id')
+    if object_story_id:
+        creative_params = {
+            'name': ad_params.get('creative_name') or 'AI Creative',
+            'object_story_id': object_story_id,
+        }
+        # Allow override via nested dict
+        return _merge_params(creative_params, ad_params.get('creative'))
+
     # Provide a simple default object_story_spec if not provided
     object_story_spec = ad_params.get('object_story_spec') or ad_params.get('creative_object_story_spec')
+
+    # Build carousel if requested
+    if not object_story_spec and (ad_params.get('carousel_items')):
+        page_id = (ad_params.get('page_id') or FACEBOOK_PAGE_ID)
+        if page_id:
+            link_data = _build_carousel_link_data(None, ad_params)
+            if link_data:
+                object_story_spec = {
+                    'page_id': page_id,
+                    'link_data': link_data
+                }
+
     if not object_story_spec:
         # Basic link ad defaults (requires a page_id for real creation)
         page_id = (ad_params.get('page_id') or FACEBOOK_PAGE_ID)
@@ -322,7 +413,7 @@ def _build_creative_params(ad_params):
                     'name': headline,
                     'description': description,
                     # Optional call to action
-                    **({'call_to_action': {'type': ad_params.get('call_to_action_type', 'LEARN_MORE'), 'value': {'link': link_url}}} if ad_params.get('call_to_action_type') else {})
+                    **({'call_to_action': {'type': ad_params.get('call_to_action_type', 'LEARN_MORE'), 'value': (ad_params.get('call_to_action_value') or {'link': link_url})}} if ad_params.get('call_to_action_type') else {})
                 }
             }
 
@@ -340,15 +431,10 @@ def _build_creative_params(ad_params):
         'title', 'body', 'image_hash', 'link_url', 'video_id', 'product_set_id',
         'degrees_of_freedom_spec', 'template_data', 'instagram_actor_id',
         'branded_content_sponsor_page_id', 'call_to_action_type', 'object_type',
-        'asset_feed_spec'
+        'asset_feed_spec', 'object_url', 'applink_treatment', 'template_url_spec'
     ):
         if key in ad_params and key not in creative_params:
             creative_params[key] = ad_params[key]
-
-    # If lead gen, ensure CTA targets a lead form
-    if _is_lead_gen_flow(ad_params):
-        lead_form_id = ad_params.get('lead_form_id') or ''
-        creative_params = _apply_leadgen_cta(creative_params, ad_params, lead_form_id)
 
     return creative_params
 
@@ -365,7 +451,10 @@ def _build_ad_params(ad_params, ad_set_id, creative_id):
     ad_params_final = _merge_params(ad_defaults, ad_params.get('ad'))
 
     # Common passthrough fields
-    for key in ('tracking_specs', 'bid_amount', 'redownload', 'execution_options', 'adlabels'):
+    for key in (
+        'tracking_specs', 'bid_amount', 'redownload', 'execution_options', 'adlabels',
+        'source_ad_id', 'conversion_domain'
+    ):
         if key in ad_params and key not in ad_params_final:
             ad_params_final[key] = ad_params[key]
 
@@ -444,8 +533,14 @@ def create_facebook_ad(ad_params):
                         ad_params['lead_form_id'] = lead_form_id
                 # Creative
                 creative_params = _build_creative_params(ad_params)
+                # Upload media for link_data and per-card if carousel
                 creative_params = _maybe_upload_image_and_apply(account, creative_params, ad_params)
                 creative_params = _maybe_upload_video_and_apply(account, creative_params, ad_params)
+                # If carousel requested, build child attachments with uploads
+                if ad_params.get('carousel_items') and 'object_story_spec' in creative_params:
+                    link_data = _build_carousel_link_data(account, ad_params)
+                    if link_data:
+                        creative_params['object_story_spec']['link_data'] = link_data
                 # If lead gen with freshly created lead_form_id, ensure CTA is applied
                 if _is_lead_gen_flow(ad_params) and ad_params.get('lead_form_id'):
                     creative_params = _apply_leadgen_cta(creative_params, ad_params, ad_params['lead_form_id'])
