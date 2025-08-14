@@ -7,13 +7,67 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>AI Facebook Ad Creator</h1>
-    <form id="ad-form">
-        <textarea id="ad-description" rows="10" cols="50" placeholder="Describe your ad in natural language..."></textarea>
-        <br>
-        <button type="submit">Create Ad</button>
-    </form>
-    <div id="result"></div>
+    <header class="topbar">
+        <div class="container">
+            <div class="branding">
+                <span class="logo" aria-hidden="true">⚡</span>
+                <h1 class="app-title">AI Facebook Ad Creator</h1>
+            </div>
+            <div class="actions">
+                <button class="btn ghost" type="button" title="Coming soon" disabled>Connect Facebook</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container main">
+        <section class="card">
+            <div class="tabs" role="tablist">
+                <button class="tab active" data-tab="basic" role="tab" aria-selected="true">Basic</button>
+                <button class="tab" data-tab="advanced" role="tab" aria-selected="false">Advanced</button>
+            </div>
+
+            <div class="tab-content active" id="tab-basic" role="tabpanel">
+                <form id="ad-form">
+                    <label for="ad-description" class="label">Describe your ad</label>
+                    <textarea id="ad-description" rows="10" placeholder="Describe your ad in natural language...&#10;Example: Create an ad for an audience of young professionals in New York with a budget of 25 dollars. The ad copy should be \"Upgrade your workspace\"."></textarea>
+                    <div class="form-row">
+                        <button type="submit" class="btn primary">Create Ad</button>
+                        <button type="button" id="clear-btn" class="btn">Clear</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="tab-content" id="tab-advanced" role="tabpanel" aria-hidden="true">
+                <form id="advanced-form">
+                    <label for="advanced-json" class="label">Advanced JSON payload</label>
+                    <textarea id="advanced-json" rows="16" placeholder='{"campaign": {"name": "Site Traffic", "objective": "LINK_CLICKS"}, "ad_set": {"daily_budget": 2000, "targeting": {"geo_locations": {"countries": ["US"]}}}, "creative": {"object_story_spec": {"page_id": "<PAGE_ID>", "link_data": {"message": "Check this out", "link": "https://example.com"}}}, "ad": {"name": "Ad 1", "status": "PAUSED"}}'></textarea>
+                    <div class="form-row">
+                        <button type="submit" class="btn primary">Create Ad (Advanced)</button>
+                        <button type="button" id="format-json-btn" class="btn">Format JSON</button>
+                        <span class="hint">Tip: add <code>"dry_run": true</code> to preview and validate without creating.</span>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <section class="card" id="results-card" hidden>
+            <div class="card-header">
+                <h3>Result</h3>
+                <div class="right-actions">
+                    <button class="btn small" id="copy-result-btn" type="button">Copy JSON</button>
+                </div>
+            </div>
+            <div id="result" class="result"></div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+
+    <div id="backdrop" class="backdrop" hidden>
+        <div class="spinner" aria-hidden="true"></div>
+        <p>Working...</p>
+    </div>
+
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
