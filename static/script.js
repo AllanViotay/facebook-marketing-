@@ -4,7 +4,7 @@ document.getElementById('ad-form').addEventListener('submit', async function(eve
     const description = document.getElementById('ad-description').value;
     const resultDiv = document.getElementById('result');
 
-    resultDiv.innerHTML = 'Thinking... and creating ad on Facebook (mock)...';
+    resultDiv.innerHTML = 'Thinking... and creating ad on Facebook (mock or real)...';
 
     try {
         const response = await fetch('/api/create-ad', {
@@ -23,6 +23,9 @@ document.getElementById('ad-form').addEventListener('submit', async function(eve
         const ai_result = data.ai_result;
         const fb_result = data.facebook_result;
 
+        const campaignId = fb_result.campaign_id || fb_result.mock_campaign_id || 'N/A';
+        const adSetId = fb_result.ad_set_id || fb_result.mock_ad_set_id || 'N/A';
+
         resultDiv.innerHTML = `
             <h3>AI Analysis Complete:</h3>
             <p><strong>Target Audience:</strong> ${ai_result.target_audience}</p>
@@ -30,10 +33,11 @@ document.getElementById('ad-form').addEventListener('submit', async function(eve
             <p><strong>Ad Copy:</strong></p>
             <pre>${ai_result.ad_copy}</pre>
             <hr>
-            <h3>Facebook Integration (Mock):</h3>
+            <h3>Facebook Integration:</h3>
             <p><strong>Status:</strong> ${fb_result.success ? 'Success' : 'Failed'}</p>
             <p><strong>Message:</strong> ${fb_result.message}</p>
-            <p><strong>Mock Campaign ID:</strong> ${fb_result.mock_campaign_id}</p>
+            <p><strong>Campaign ID:</strong> ${campaignId}</p>
+            <p><strong>Ad Set ID:</strong> ${adSetId}</p>
         `;
 
     } catch (error) {

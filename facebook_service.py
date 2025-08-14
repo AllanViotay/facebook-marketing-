@@ -1,89 +1,132 @@
 # In a real app, you would install the facebook_business SDK
-# pip install facebook_business
+# pip install facebook-business
 
-# from facebook_business.api import FacebookAdsApi
-# from facebook_business.adobjects.campaign import Campaign
-# from facebook_business.adobjects.adset import AdSet
-# from facebook_business.adobjects.adcreative import AdCreative
-# from facebook_business.adobjects.ad import Ad
+try:
+    from config import FACEBOOK_APP_ID, FACEBOOK_APP_SECRET, FACEBOOK_ACCESS_TOKEN, FACEBOOK_AD_ACCOUNT_ID
+except Exception:
+    import os
+    FACEBOOK_APP_ID = os.environ.get("FACEBOOK_APP_ID")
+    FACEBOOK_APP_SECRET = os.environ.get("FACEBOOK_APP_SECRET")
+    FACEBOOK_ACCESS_TOKEN = os.environ.get("FACEBOOK_ACCESS_TOKEN")
+    FACEBOOK_AD_ACCOUNT_ID = os.environ.get("FACEBOOK_AD_ACCOUNT_ID")
 
-# from config import FACEBOOK_APP_ID, FACEBOOK_APP_SECRET, FACEBOOK_ACCESS_TOKEN
+# Optional Facebook SDK imports
+try:
+    from facebook_business.api import FacebookAdsApi  # type: ignore
+    from facebook_business.adobjects.adaccount import AdAccount  # type: ignore
+    _FB_SDK_AVAILABLE = True
+except Exception:
+    _FB_SDK_AVAILABLE = False
+
+
+def _can_use_real_facebook():
+    return (
+        _FB_SDK_AVAILABLE
+        and bool(FACEBOOK_APP_ID)
+        and bool(FACEBOOK_APP_SECRET)
+        and bool(FACEBOOK_ACCESS_TOKEN)
+        and bool(FACEBOOK_AD_ACCOUNT_ID)
+    )
+
 
 def initialize_facebook_api():
     """
-    Initializes the Facebook Ads API with credentials from a config file.
+    Initializes the Facebook Ads API with credentials from config or env.
     In a real app, this would be called once when the app starts.
     """
-    # In a real implementation:
-    # FacebookAdsApi.init(app_id=FACEBOOK_APP_ID, app_secret=FACEBOOK_APP_SECRET, access_token=FACEBOOK_ACCESS_TOKEN)
-    print("Facebook API initialized (mock).")
+    if not _can_use_real_facebook():
+        print("Facebook API initialized (mock).")
+        return
+    FacebookAdsApi.init(app_id=FACEBOOK_APP_ID, app_secret=FACEBOOK_APP_SECRET, access_token=FACEBOOK_ACCESS_TOKEN)
+
+
+def _parse_budget_to_cents(budget_str):
+    """Very simple parser that extracts the first integer and converts to cents (USD)."""
+    if not budget_str:
+        return 1000  # default $10/day
+    import re
+    match = re.search(r"(\d+)", str(budget_str))
+    if match:
+        try:
+            dollars = int(match.group(1))
+            return max(100, dollars * 100)  # minimum $1
+        except Exception:
+            pass
+    return 1000
+
 
 def create_facebook_ad(ad_params):
     """
-    This function takes ad parameters and creates a Facebook ad.
-    It currently only logs the actions it would take.
+    Takes ad parameters and creates a Facebook ad if credentials/SDK are configured.
+    Otherwise, simulates the process and returns mock IDs.
 
-    In a real implementation, this would involve creating:
-    1. A Campaign (the objective of the ad)
-    2. An AdSet (targeting, budget, schedule)
-    3. An AdCreative (the visual part of the ad: image/video and copy)
-    4. An Ad (which ties the AdSet and AdCreative together)
+    Returns a dict with keys: success, message, campaign_id, ad_set_id
     """
-    print(f"--- Starting Facebook Ad Creation (Mock) ---")
+    print(f"--- Starting Facebook Ad Creation ({'Real' if _can_use_real_facebook() else 'Mock'}) ---")
     print(f"Received ad parameters: {ad_params}")
 
     try:
-        # This would be done once at app startup
         initialize_facebook_api()
 
-        # Step 1: Create a Campaign
-        # A real implementation would need to map a high-level goal to a Facebook objective
+        campaign_id = None
+        ad_set_id = None
+
+        # Prepare common params
         campaign_params = {
             'name': f"AI Campaign: {ad_params.get('ad_copy', 'Untitled')[:50]}",
-            'objective': 'LINK_CLICKS', # Example objective, could be inferred by AI
-            'status': 'PAUSED', # Always start paused to prevent accidental spending
+            'objective': 'LINK_CLICKS',
+            'status': 'PAUSED',
             'special_ad_categories': [],
         }
-        print(f"Would create Campaign with params: {campaign_params}")
-        # In a real app, you'd need the user's Ad Account ID, e.g., 'act_123456789'
-        # real_campaign = Campaign(parent_id='act_<AD_ACCOUNT_ID>')
-        # real_campaign.remote_create(params=campaign_params)
-        # campaign_id = real_campaign['id']
-        campaign_id = "campaign_12345_mock"
-        print(f"Mock Campaign created with ID: {campaign_id}")
 
-        # Step 2: Create an Ad Set
-        # This requires parsing the budget and audience from the ad_params
+        daily_budget_cents = _parse_budget_to_cents(ad_params.get('budget'))
         ad_set_params = {
             'name': f"AI Ad Set for {ad_params.get('target_audience', 'default audience')}",
-            'campaign_id': campaign_id,
             'billing_event': 'IMPRESSIONS',
-            'daily_budget': 1000, # Budget in cents. '10 dollars' -> 1000. Needs parsing.
+            'daily_budget': daily_budget_cents,
             'targeting': {
-                'geo_locations': {'countries': ['US']}, # Needs to be inferred by AI
+                'geo_locations': {'countries': ['US']},
                 'publisher_platforms': ['facebook', 'instagram'],
                 'facebook_positions': ['feed'],
                 'instagram_positions': ['stream'],
-                # A real AI would parse 'young professionals in New York' into structured targeting
             },
             'status': 'PAUSED',
         }
-        print(f"Would create Ad Set with params: {ad_set_params}")
-        ad_set_id = "ad_set_67890_mock"
-        print(f"Mock Ad Set created with ID: {ad_set_id}")
 
-        # Further steps would include creating AdCreative (the ad's visuals and text)
-        # and an Ad object to tie it all together.
+        if _can_use_real_facebook():
+            # Create campaign
+            account = AdAccount(FACEBOOK_AD_ACCOUNT_ID)
+            campaign = account.create_campaign(params=campaign_params)
+            campaign_id = campaign.get('id') or campaign.get('campaign_id')
 
-        print(f"--- Facebook Ad Creation (Mock) Finished ---")
+            # Create ad set
+            # Note: The SDK may require additional fields (start_time, end_time, optimization_goal)
+            # For MVP, we set minimal fields and keep status PAUSED
+            ad_set_params_with_campaign = dict(ad_set_params)
+            ad_set_params_with_campaign['campaign_id'] = campaign_id
+            ad_set = account.create_ad_set(params=ad_set_params_with_campaign)
+            ad_set_id = ad_set.get('id') or ad_set.get('adset_id')
+
+            print(f"Created Campaign ID: {campaign_id}")
+            print(f"Created Ad Set ID: {ad_set_id}")
+        else:
+            # Mock behavior
+            campaign_id = "campaign_12345_mock"
+            ad_set_id = "ad_set_67890_mock"
+            print(f"Mock Campaign created with ID: {campaign_id}")
+            print(f"Mock Ad Set created with ID: {ad_set_id}")
+
+        print(f"--- Facebook Ad Creation Finished ---")
 
         return {
             "success": True,
-            "message": "Successfully simulated creating a Facebook ad.",
-            "mock_campaign_id": campaign_id,
-            "mock_ad_set_id": ad_set_id
+            "message": (
+                "Created Facebook campaign and ad set." if _can_use_real_facebook() else "Successfully simulated creating a Facebook ad."
+            ),
+            "campaign_id": campaign_id,
+            "ad_set_id": ad_set_id,
         }
 
     except Exception as e:
-        print(f"An error occurred during mock Facebook ad creation: {e}")
-        return {"success": False, "message": str(e)}
+        print(f"An error occurred during Facebook ad creation: {e}")
+        return {"success": False, "message": str(e), "campaign_id": None, "ad_set_id": None}
