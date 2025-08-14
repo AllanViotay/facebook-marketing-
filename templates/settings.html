@@ -41,8 +41,9 @@
 				<input id="fb_page_id" class="input" placeholder="..." value="{{ fb.FACEBOOK_PAGE_ID or '' }}">
 
 				<div class="form-row">
+					<label><input type="checkbox" id="persist"/> Persist to config.py</label>
 					<button type="submit" class="btn primary">Save</button>
-					<span class="hint">Stored in memory for this process only.</span>
+					<span class="hint">Note: config.py is listed in .gitignore.</span>
 				</div>
 			</form>
 		</section>
@@ -51,7 +52,6 @@
 	<div id="toast" class="toast" role="status" hidden></div>
 	<script>
 	(function(){
-		const $ = (s)=>document.querySelector(s);
 		const toast = document.getElementById('toast');
 		function showToast(t){ toast.textContent=t; toast.hidden=false; setTimeout(()=>toast.hidden=true,2000); }
 		document.getElementById('settings-form').addEventListener('submit', async (e)=>{
@@ -64,13 +64,14 @@
 					access_token: document.getElementById('fb_access_token').value.trim() || null,
 					ad_account_id: document.getElementById('fb_ad_account').value.trim() || null,
 					page_id: document.getElementById('fb_page_id').value.trim() || null,
-				}
+				},
+				persist: document.getElementById('persist').checked
 			};
 			try{
 				const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
 				if(!res.ok) throw new Error('Save failed');
 				const data = await res.json();
-				showToast(data.message || 'Saved');
+				showToast(data.message + (data.persisted ? ' (saved to config.py)' : ''));
 			} catch(err){ showToast(err.message); }
 		});
 	})();

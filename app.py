@@ -4,6 +4,7 @@ from facebook_service import create_facebook_ad
 from facebook_service import get_insights
 from ai_service import update_runtime_openai_key
 from facebook_service import update_runtime_facebook_creds, get_runtime_facebook_creds
+from settings_persistence import save_to_config_py
 
 app = Flask(__name__)
 
@@ -19,6 +20,8 @@ def settings_page():
 @app.route('/api/settings', methods=['POST'])
 def save_settings():
     payload = request.get_json() or {}
+    persist = bool(payload.get('persist'))
+    # Runtime apply
     if 'openai_key' in payload and payload['openai_key']:
         update_runtime_openai_key(payload['openai_key'])
     fb = payload.get('facebook') or {}
@@ -30,7 +33,17 @@ def save_settings():
             ad_account_id=fb.get('ad_account_id'),
             page_id=fb.get('page_id'),
         )
-    return jsonify({'success': True, 'message': 'Settings applied for this session.'})
+    saved_path = None
+    if persist:
+        saved_path = save_to_config_py(
+            openai_key=payload.get('openai_key'),
+            fb_app_id=fb.get('app_id'),
+            fb_app_secret=fb.get('app_secret'),
+            fb_access_token=fb.get('access_token'),
+            fb_ad_account_id=fb.get('ad_account_id'),
+            fb_page_id=fb.get('page_id'),
+        )
+    return jsonify({'success': True, 'message': 'Settings applied.', 'persisted': bool(saved_path), 'path': saved_path})
 
 @app.route('/api/create-ad', methods=['POST'])
 def create_ad():
