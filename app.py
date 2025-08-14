@@ -5,6 +5,7 @@ from facebook_service import get_insights
 from ai_service import update_runtime_openai_key
 from facebook_service import update_runtime_facebook_creds, get_runtime_facebook_creds
 from settings_persistence import save_to_config_py
+from ai_service import generate_ad_copy, generate_ad_image
 
 app = Flask(__name__)
 
@@ -44,6 +45,27 @@ def save_settings():
             fb_page_id=fb.get('page_id'),
         )
     return jsonify({'success': True, 'message': 'Settings applied.', 'persisted': bool(saved_path), 'path': saved_path})
+
+@app.route('/api/ai/copy', methods=['POST'])
+def ai_copy():
+    payload = request.get_json() or {}
+    res = generate_ad_copy(
+        prompt=payload.get('prompt') or '',
+        tone=payload.get('tone'),
+        length=payload.get('length'),
+        language=payload.get('language'),
+    )
+    return jsonify({'result': res})
+
+@app.route('/api/ai/image', methods=['POST'])
+def ai_image():
+    payload = request.get_json() or {}
+    res = generate_ad_image(
+        prompt=payload.get('prompt') or '',
+        size=payload.get('size') or '1024x1024',
+        n=int(payload.get('n') or 1),
+    )
+    return jsonify({'result': res})
 
 @app.route('/api/create-ad', methods=['POST'])
 def create_ad():

@@ -20,6 +20,57 @@ def update_runtime_openai_key(key: str):
     OPENAI_API_KEY = key
 
 
+def generate_ad_copy(prompt: str, tone: str = None, length: str = None, language: str = None) -> dict:
+    """
+    Generates persuasive ad copy using OpenAI. Returns dict with 'text'.
+    Falls back to a simple template if AI is not configured.
+    """
+    if not (OPENAI_API_KEY and _OPENAI_AVAILABLE):
+        base = prompt.strip() or "Your product"
+        return {"text": f"{base}. Limited-time offer. Shop now!"}
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    sys = (
+        "You write persuasive, concise Facebook ad primary text."
+        " Output only the copy, no markdown."
+    )
+    extras = []
+    if tone:
+        extras.append(f"Tone: {tone}.")
+    if length:
+        extras.append(f"Length: {length}.")
+    if language:
+        extras.append(f"Language: {language}.")
+
+    user = f"Brief: {prompt}. {' '.join(extras)}"
+
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.7,
+        messages=[{"role":"system","content":sys},{"role":"user","content":user}],
+    )
+    text = (resp.choices[0].message.content or "").strip()
+    return {"text": text}
+
+
+def generate_ad_image(prompt: str, size: str = "1024x1024", n: int = 1) -> dict:
+    """
+    Generates ad images using OpenAI Images API. Returns dict with 'images': [base64 strings].
+    If AI not configured, returns an error field.
+    """
+    if not (OPENAI_API_KEY and _OPENAI_AVAILABLE):
+        return {"error": "AI image generation not configured. Provide OPENAI_API_KEY."}
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    try:
+        res = client.images.generate(model="gpt-image-1", prompt=prompt, size=size, n=n)
+        images_b64 = [d.b64_json for d in res.data]
+        return {"images": images_b64}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def get_ad_parameters_from_ai(description):
     """
     Main function to get ad parameters from a description.
