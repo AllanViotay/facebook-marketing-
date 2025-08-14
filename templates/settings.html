@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Settings - AI Facebook Ad Creator</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+	<header class="topbar">
+		<div class="container">
+			<div class="branding">
+				<span class="logo" aria-hidden="true">⚙️</span>
+				<h1 class="app-title">Settings</h1>
+			</div>
+			<div class="actions">
+				<a class="btn" href="/">Back</a>
+			</div>
+		</div>
+	</header>
+	<main class="container main">
+		<section class="card">
+			<h3>Runtime credentials</h3>
+			<form id="settings-form">
+				<label class="label" for="openai_key">OpenAI API Key</label>
+				<input id="openai_key" type="password" class="input" placeholder="sk-..." value="">
+
+				<label class="label" for="fb_app_id">Facebook App ID</label>
+				<input id="fb_app_id" class="input" placeholder="..." value="{{ fb.FACEBOOK_APP_ID or '' }}">
+
+				<label class="label" for="fb_app_secret">Facebook App Secret</label>
+				<input id="fb_app_secret" type="password" class="input" placeholder="..." value="">
+
+				<label class="label" for="fb_access_token">Facebook Access Token</label>
+				<input id="fb_access_token" type="password" class="input" placeholder="..." value="">
+
+				<label class="label" for="fb_ad_account">Facebook Ad Account ID (act_...)</label>
+				<input id="fb_ad_account" class="input" placeholder="act_..." value="{{ fb.FACEBOOK_AD_ACCOUNT_ID or '' }}">
+
+				<label class="label" for="fb_page_id">Facebook Page ID</label>
+				<input id="fb_page_id" class="input" placeholder="..." value="{{ fb.FACEBOOK_PAGE_ID or '' }}">
+
+				<div class="form-row">
+					<label><input type="checkbox" id="persist"/> Persist to config.py</label>
+					<button type="submit" class="btn primary">Save</button>
+					<span class="hint">Note: config.py is listed in .gitignore.</span>
+				</div>
+			</form>
+		</section>
+	</main>
+
+	<div id="toast" class="toast" role="status" hidden></div>
+	<script>
+	(function(){
+		const toast = document.getElementById('toast');
+		function showToast(t){ toast.textContent=t; toast.hidden=false; setTimeout(()=>toast.hidden=true,2000); }
+		document.getElementById('settings-form').addEventListener('submit', async (e)=>{
+			e.preventDefault();
+			const payload = {
+				openai_key: document.getElementById('openai_key').value.trim() || null,
+				facebook: {
+					app_id: document.getElementById('fb_app_id').value.trim() || null,
+					app_secret: document.getElementById('fb_app_secret').value.trim() || null,
+					access_token: document.getElementById('fb_access_token').value.trim() || null,
+					ad_account_id: document.getElementById('fb_ad_account').value.trim() || null,
+					page_id: document.getElementById('fb_page_id').value.trim() || null,
+				},
+				persist: document.getElementById('persist').checked
+			};
+			try{
+				const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+				if(!res.ok) throw new Error('Save failed');
+				const data = await res.json();
+				showToast(data.message + (data.persisted ? ' (saved to config.py)' : ''));
+			} catch(err){ showToast(err.message); }
+		});
+	})();
+	</script>
+</body>
+</html>
