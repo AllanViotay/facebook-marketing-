@@ -25,6 +25,8 @@ document.getElementById('ad-form').addEventListener('submit', async function(eve
 
         const campaignId = fb_result.campaign_id || fb_result.mock_campaign_id || 'N/A';
         const adSetId = fb_result.ad_set_id || fb_result.mock_ad_set_id || 'N/A';
+        const creativeId = fb_result.creative_id || 'N/A';
+        const adId = fb_result.ad_id || 'N/A';
 
         resultDiv.innerHTML = `
             <h3>AI Analysis Complete:</h3>
@@ -38,6 +40,8 @@ document.getElementById('ad-form').addEventListener('submit', async function(eve
             <p><strong>Message:</strong> ${fb_result.message}</p>
             <p><strong>Campaign ID:</strong> ${campaignId}</p>
             <p><strong>Ad Set ID:</strong> ${adSetId}</p>
+            <p><strong>Creative ID:</strong> ${creativeId}</p>
+            <p><strong>Ad ID:</strong> ${adId}</p>
         `;
 
     } catch (error) {

@@ -16,7 +16,10 @@ def create_ad():
     # Step 1: Get ad parameters from AI service
     ad_params = get_ad_parameters_from_ai(description)
 
-    # Step 2: Create the ad on Facebook (mocked)
+    # Allow basic overrides from frontend call (optional)
+    ad_params.update({k: v for k, v in data.items() if k not in ('description',)})
+
+    # Step 2: Create the ad on Facebook (mock or real)
     facebook_result = create_facebook_ad(ad_params)
 
     # Step 3: Combine results and return to frontend
@@ -26,6 +29,16 @@ def create_ad():
     }
 
     return jsonify(response)
+
+@app.route('/api/create-ad-advanced', methods=['POST'])
+def create_ad_advanced():
+    """
+    Accepts a full payload for campaign/ad set/creative/ad via nested dicts.
+    Does not call AI; directly passes through to Facebook service.
+    """
+    payload = request.get_json() or {}
+    result = create_facebook_ad(payload)
+    return jsonify({'facebook_result': result})
 
 
 if __name__ == '__main__':

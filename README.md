@@ -41,6 +41,7 @@ This MVP (Minimum Viable Product) ships with a working frontend, backend, and mo
       export FACEBOOK_APP_SECRET="..."
       export FACEBOOK_ACCESS_TOKEN="..."
       export FACEBOOK_AD_ACCOUNT_ID="act_..."
+      export FACEBOOK_PAGE_ID="..."
       ```
 
     - Or create a `config.py` file in the project root based on `config.example.py`.
@@ -54,9 +55,76 @@ python app.py
 Open `http://127.0.0.1:5000` in your browser.
 
 - Without credentials, the app will run using mock AI and mock Facebook calls.
-- With credentials, the app will use OpenAI to extract parameters and the Facebook SDK to create a paused Campaign and Ad Set in your account.
+- With credentials, the app will use OpenAI to extract parameters and the Facebook SDK to create a paused Campaign and Ad Set, upload optional image/video assets, and create an AdCreative and Ad.
 
-## Notes
+## Advanced API (full control)
 
-- When using the Facebook SDK, minimal required fields are set and all objects are created with status `PAUSED` to avoid accidental spend.
-- Budget parsing is simplistic: the first integer found in the description is interpreted as USD dollars per day. Adjust in `facebook_service.py` as needed.
+Use `POST /api/create-ad-advanced` to pass through any Facebook fields when creating:
+
+- Campaign (`campaign`)
+- Ad Set (`ad_set`)
+- AdCreative (`creative`)
+- Ad (`ad`)
+
+Additionally, you may provide convenience top-level fields that will be merged into entities or used to build defaults:
+
+- `objective`, `campaign_status`, `special_ad_categories`, `special_ad_category_country`, `buying_type`, `bid_strategy`
+- `daily_budget`, `lifetime_budget`, `billing_event`, `adset_status`, `optimization_goal`, `pacing_type`, `targeting`, `geo_locations`, `publisher_platforms`, `facebook_positions`, `instagram_positions`, `start_time`, `end_time`, `bid_amount`, `promoted_object`
+- `ad_name`, `ad_status`, `tracking_specs`, `execution_options`, `adlabels`
+- `ad_copy`, `headline`, `description`, `call_to_action_type`, `page_id`, `link_url` (or `website_url`), `object_story_spec`, `asset_feed_spec`, `instagram_actor_id`
+- Asset helpers: `image_hash` OR provide one of: `image_path`, `image_base64`, `image_url` (we will upload & inject the hash); `video_id` OR `video_path`/`video_url` (we will upload & inject the id)
+
+Example minimal payload (link ad):
+
+```json
+{
+  "campaign": {"name": "Site Traffic", "objective": "LINK_CLICKS", "status": "PAUSED"},
+  "ad_set": {
+    "name": "Prospects US",
+    "billing_event": "IMPRESSIONS",
+    "daily_budget": 2000,
+    "targeting": {"geo_locations": {"countries": ["US"]}}
+  },
+  "creative": {
+    "name": "Link Creative",
+    "object_story_spec": {
+      "page_id": "<PAGE_ID>",
+      "link_data": {"message": "Check this out", "link": "https://example.com", "name": "Learn more"}
+    }
+  },
+  "ad": {"name": "Ad 1", "status": "PAUSED"}
+}
+```
+
+Example with image upload helper:
+
+```json
+{
+  "objective": "LINK_CLICKS",
+  "ad_set": {"daily_budget": 1500, "targeting": {"geo_locations": {"countries": ["US"]}}},
+  "page_id": "<PAGE_ID>",
+  "link_url": "https://example.com",
+  "ad_copy": "Upgrade your workspace",
+  "headline": "Spring Sale",
+  "image_url": "https://example.com/banner.jpg"
+}
+```
+
+Example with video upload helper:
+
+```json
+{
+  "objective": "VIDEO_VIEWS",
+  "ad_set": {"daily_budget": 3000, "optimization_goal": "THRUPLAY"},
+  "page_id": "<PAGE_ID>",
+  "ad_copy": "Watch our story",
+  "headline": "Behind the scenes",
+  "video_url": "https://example.com/spot.mp4"
+}
+```
+
+Notes:
+
+- Any valid Marketing API field can be passed inside the corresponding nested object; we forward it as-is. The helpers only fill reasonable defaults and inject uploaded asset IDs when you provide image/video inputs.
+- All objects are created with status `PAUSED` by default unless you override.
+- To avoid accidental spend, verify budgets and statuses before switching to `ACTIVE`.

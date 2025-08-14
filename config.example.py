@@ -8,3 +8,4 @@ FACEBOOK_APP_ID = "..."
 FACEBOOK_APP_SECRET = "..."
 FACEBOOK_ACCESS_TOKEN = "..."
 FACEBOOK_AD_ACCOUNT_ID = "act_..."
+FACEBOOK_PAGE_ID = "..."  # Page ID used for object_story_spec
