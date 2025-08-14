@@ -1026,3 +1026,27 @@ def get_insights(params: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:
         return {'success': False, 'message': str(e)}
+
+
+def update_runtime_facebook_creds(app_id: str = None, app_secret: str = None, access_token: str = None, ad_account_id: str = None, page_id: str = None):
+    global FACEBOOK_APP_ID, FACEBOOK_APP_SECRET, FACEBOOK_ACCESS_TOKEN, FACEBOOK_AD_ACCOUNT_ID, FACEBOOK_PAGE_ID
+    if app_id is not None:
+        FACEBOOK_APP_ID = app_id
+    if app_secret is not None:
+        FACEBOOK_APP_SECRET = app_secret
+    if access_token is not None:
+        FACEBOOK_ACCESS_TOKEN = access_token
+    if ad_account_id is not None:
+        FACEBOOK_AD_ACCOUNT_ID = ad_account_id
+    if page_id is not None:
+        FACEBOOK_PAGE_ID = page_id
+
+
+def get_runtime_facebook_creds() -> Dict[str, Any]:
+    return {
+        'FACEBOOK_APP_ID': FACEBOOK_APP_ID,
+        'FACEBOOK_APP_SECRET': '***' if FACEBOOK_APP_SECRET else None,
+        'FACEBOOK_ACCESS_TOKEN': '***' if FACEBOOK_ACCESS_TOKEN else None,
+        'FACEBOOK_AD_ACCOUNT_ID': FACEBOOK_AD_ACCOUNT_ID,
+        'FACEBOOK_PAGE_ID': FACEBOOK_PAGE_ID,
+    }

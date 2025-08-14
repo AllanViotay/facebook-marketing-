@@ -2,12 +2,35 @@ from flask import Flask, render_template, request, jsonify
 from ai_service import get_ad_parameters_from_ai
 from facebook_service import create_facebook_ad
 from facebook_service import get_insights
+from ai_service import update_runtime_openai_key
+from facebook_service import update_runtime_facebook_creds, get_runtime_facebook_creds
 
 app = Flask(__name__)
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/settings')
+def settings_page():
+    fb = get_runtime_facebook_creds()
+    return render_template('settings.html', fb=fb)
+
+@app.route('/api/settings', methods=['POST'])
+def save_settings():
+    payload = request.get_json() or {}
+    if 'openai_key' in payload and payload['openai_key']:
+        update_runtime_openai_key(payload['openai_key'])
+    fb = payload.get('facebook') or {}
+    if fb:
+        update_runtime_facebook_creds(
+            app_id=fb.get('app_id'),
+            app_secret=fb.get('app_secret'),
+            access_token=fb.get('access_token'),
+            ad_account_id=fb.get('ad_account_id'),
+            page_id=fb.get('page_id'),
+        )
+    return jsonify({'success': True, 'message': 'Settings applied for this session.'})
 
 @app.route('/api/create-ad', methods=['POST'])
 def create_ad():

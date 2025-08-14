@@ -15,6 +15,11 @@ except Exception:
     _OPENAI_AVAILABLE = False
 
 
+def update_runtime_openai_key(key: str):
+    global OPENAI_API_KEY
+    OPENAI_API_KEY = key
+
+
 def get_ad_parameters_from_ai(description):
     """
     Main function to get ad parameters from a description.
