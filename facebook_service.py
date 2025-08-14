@@ -18,6 +18,7 @@ try:
     from facebook_business.adobjects.adimage import AdImage  # type: ignore
     from facebook_business.adobjects.advideo import AdVideo  # type: ignore
     from facebook_business.adobjects.page import Page  # type: ignore
+    from facebook_business.adobjects.targetingsearch import TargetingSearch  # type: ignore
     _FB_SDK_AVAILABLE = True
 except Exception:
     _FB_SDK_AVAILABLE = False
@@ -68,6 +69,146 @@ def _merge_params(base, override):
     for k, v in (override or {}).items():
         combined[k] = v
     return combined
+
+
+def _resolve_interests_from_terms(terms: List[str]) -> List[Dict[str, Any]]:
+    if not terms or not _can_use_real_facebook():
+        return []
+    out: List[Dict[str, Any]] = []
+    try:
+        for t in terms:
+            res = TargetingSearch.search(params={'q': t, 'type': 'adinterest'})
+            if isinstance(res, list):
+                for item in res[:10]:
+                    if item.get('id'):
+                        out.append({'id': item['id'], 'name': item.get('name', t)})
+    except Exception:
+        return []
+    return out
+
+
+def _build_targeting(ad_params: Dict[str, Any]) -> Dict[str, Any]:
+    targeting: Dict[str, Any] = dict(ad_params.get('targeting') or {})
+
+    # Basic demographics
+    for key in ('age_min', 'age_max', 'genders', 'locales', 'user_os', 'user_device', 'wireless_carrier'):
+        if key in ad_params and key not in targeting:
+            targeting[key] = ad_params[key]
+
+    # Device/platform placements
+    for key in (
+        'device_platforms', 'publisher_platforms', 'facebook_positions', 'instagram_positions',
+        'messenger_positions', 'audience_network_positions'
+    ):
+        if key in ad_params:
+            targeting[key] = ad_params[key]
+
+    # Languages helper (aliases locales) if provided as strings; expect numeric codes otherwise
+    if 'languages' in ad_params and 'locales' not in targeting:
+        targeting['locales'] = ad_params['languages']
+
+    # Geo locations
+    geo = ad_params.get('geo_locations') or {}
+    if not geo:
+        # Build from helpers
+        helper_geo: Dict[str, Any] = {}
+        if 'countries' in ad_params:
+            helper_geo['countries'] = ad_params['countries']
+        if 'regions' in ad_params:
+            helper_geo['regions'] = ad_params['regions']
+        if 'cities' in ad_params:
+            helper_geo['cities'] = ad_params['cities']
+        if 'zips' in ad_params:
+            helper_geo['zips'] = ad_params['zips']
+        if 'custom_locations' in ad_params:
+            helper_geo['custom_locations'] = ad_params['custom_locations']
+        if 'location_types' in ad_params:
+            helper_geo['location_types'] = ad_params['location_types']
+        geo = helper_geo
+    if geo:
+        targeting['geo_locations'] = geo
+    # Exclusions for geo
+    if 'excluded_geo_locations' in ad_params and 'excluded_geo_locations' not in targeting:
+        targeting['excluded_geo_locations'] = ad_params['excluded_geo_locations']
+
+    # Custom audiences include/exclude
+    def _ensure_list_of_id_dicts(ids):
+        if not ids:
+            return []
+        arr = []
+        for i in ids:
+            arr.append({'id': i} if isinstance(i, (str, int)) else i)
+        return arr
+
+    if 'custom_audience_ids' in ad_params or 'custom_audiences' in ad_params:
+        targeting['custom_audiences'] = _ensure_list_of_id_dicts(ad_params.get('custom_audience_ids') or ad_params.get('custom_audiences'))
+    if 'excluded_custom_audience_ids' in ad_params or 'excluded_custom_audiences' in ad_params:
+        targeting['excluded_custom_audiences'] = _ensure_list_of_id_dicts(ad_params.get('excluded_custom_audience_ids') or ad_params.get('excluded_custom_audiences'))
+
+    # Connections
+    for key in ('connections', 'excluded_connections', 'friends_of_connections'):
+        if key in ad_params and key not in targeting:
+            targeting[key] = ad_params[key]
+
+    # Lookalike spec builder
+    if 'lookalike' in ad_params and 'lookalike_spec' not in targeting:
+        ll = ad_params['lookalike'] or {}
+        origin_id = ll.get('origin_audience_id') or ll.get('origin_id')
+        if origin_id:
+            targeting['lookalike_spec'] = {
+                'type': ll.get('type', 'similarity'),
+                'ratio': ll.get('ratio', 0.01),
+                'country': ll.get('country') or (ad_params.get('countries')[0] if ad_params.get('countries') else None),
+                'origin': [{'id': origin_id}],
+            }
+
+    # Interests/behaviors demography: support direct lists and flexible_spec
+    flexible_spec: List[Dict[str, Any]] = list(targeting.get('flexible_spec') or [])
+
+    # Direct IDs provided
+    direct_interests = ad_params.get('interests') or []
+    interest_ids = ad_params.get('interest_ids') or []
+    if interest_ids and not direct_interests:
+        direct_interests = [{'id': iid} for iid in interest_ids]
+
+    if direct_interests:
+        flexible_spec.append({'interests': direct_interests})
+
+    # Resolve interest terms if requested
+    if ad_params.get('interest_terms'):
+        resolved = _resolve_interests_from_terms(ad_params['interest_terms'])
+        if resolved:
+            flexible_spec.append({'interests': resolved})
+
+    # Behaviors, life events, industries etc.
+    for key in ('behaviors', 'life_events', 'industries', 'politics', 'family_statuses', 'income', 'home_ownership', 'ethnic_affinity'):
+        if key in ad_params:
+            flexible_spec.append({key: ad_params[key]})
+
+    # Education and work
+    for key in ('education_statuses', 'college_years', 'education_majors', 'education_schools', 'work_employers', 'work_positions'):
+        if key in ad_params:
+            flexible_spec.append({key: ad_params[key]})
+
+    # Exclusions helper
+    exclusions = targeting.get('exclusions') or {}
+    for key in ('exclude_interests', 'exclude_behaviors'):
+        if key in ad_params:
+            field = key.replace('exclude_', '')
+            existing = exclusions.get(field) or []
+            exclusions[field] = existing + ad_params[key]
+    if exclusions:
+        targeting['exclusions'] = exclusions
+
+    if flexible_spec:
+        targeting['flexible_spec'] = flexible_spec
+
+    # Detailed targeting expansion flag passthroughs
+    for key in ('targeting_expansion', 'targeting_optimization'):  # legacy and new-style
+        if key in ad_params and key not in targeting:
+            targeting[key] = ad_params[key]
+
+    return targeting
 
 
 def _is_lead_gen_flow(ad_params: Dict[str, Any]) -> bool:
@@ -138,19 +279,8 @@ def _build_adset_params(ad_params, campaign_id):
     if lifetime_budget is not None:
         ad_set_defaults['lifetime_budget'] = int(lifetime_budget)
 
-    # Targeting
-    targeting = ad_params.get('targeting') or {
-        'geo_locations': ad_params.get('geo_locations') or {'countries': ['US']},
-    }
-    # Placement helpers
-    if 'publisher_platforms' in ad_params or 'facebook_positions' in ad_params or 'instagram_positions' in ad_params:
-        targeting = dict(targeting)
-        if 'publisher_platforms' in ad_params:
-            targeting['publisher_platforms'] = ad_params['publisher_platforms']
-        if 'facebook_positions' in ad_params:
-            targeting['facebook_positions'] = ad_params['facebook_positions']
-        if 'instagram_positions' in ad_params:
-            targeting['instagram_positions'] = ad_params['instagram_positions']
+    # Build targeting from helpers + passthrough
+    targeting = _build_targeting(ad_params)
     if targeting:
         ad_set_defaults['targeting'] = targeting
 

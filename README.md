@@ -139,3 +139,40 @@ Notes:
 - We automatically wire the `lead_gen_form_id` into the creative’s call-to-action.
 - All objects are created with status `PAUSED` by default unless you override.
 - To avoid accidental spend, verify budgets and statuses before switching to `ACTIVE`.
+
+## Targeting helpers
+
+You can provide a complete `targeting` object or use helper fields; the service merges helpers into a valid Marketing API targeting spec.
+
+Supported helpers (selected):
+- Geo: `countries`, `regions`, `cities`, `zips`, `custom_locations`, `location_types`, `excluded_geo_locations` (or pass full `geo_locations`)
+- Demographics: `age_min`, `age_max`, `genders`, `locales` (alias `languages`), education/work fields
+- Platforms/placements: `device_platforms`, `publisher_platforms`, `facebook_positions`, `instagram_positions`, `messenger_positions`, `audience_network_positions`
+- Interests: `interest_ids` or full `interests` objects; `interest_terms` (auto-resolves top matches via TargetingSearch when SDK/creds available)
+- Behaviors and more: `behaviors`, `life_events`, `industries`, `politics`, `family_statuses`, `income`, `home_ownership`, `ethnic_affinity`
+- Custom audiences: `custom_audience_ids`/`custom_audiences`, `excluded_custom_audience_ids`/`excluded_custom_audiences`
+- Connections: `connections`, `excluded_connections`, `friends_of_connections`
+- Lookalike: `lookalike` with keys `origin_audience_id`, `country`, `type`, `ratio`
+- Expansion: `targeting_expansion` / `targeting_optimization`
+
+Example combining helpers:
+
+```json
+{
+  "ad_set": {
+    "daily_budget": 2500
+  },
+  "countries": ["US"],
+  "cities": [{"key": "2424766", "radius": 10, "distance_unit": "mile"}],
+  "age_min": 25,
+  "age_max": 55,
+  "genders": [1],
+  "publisher_platforms": ["facebook", "instagram"],
+  "facebook_positions": ["feed"],
+  "instagram_positions": ["stream", "story"],
+  "interest_terms": ["home office", "standing desk"],
+  "custom_audience_ids": ["<CA_ID>"]
+}
+```
+
+You may also pass a full `targeting` object directly; we forward it as-is.
