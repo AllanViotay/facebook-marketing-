@@ -1,4 +1,6 @@
 from flask import Flask, render_template, request, jsonify
+from ai_service import get_ad_parameters_from_ai
+from facebook_service import create_facebook_ad
 
 app = Flask(__name__)
 
@@ -11,37 +13,19 @@ def create_ad():
     data = request.get_json()
     description = data.get('description', '')
 
-    # Mock AI processing
-    ad_params = mock_ai_processing(description)
+    # Step 1: Get ad parameters from AI service
+    ad_params = get_ad_parameters_from_ai(description)
 
-    return jsonify(ad_params)
+    # Step 2: Create the ad on Facebook (mocked)
+    facebook_result = create_facebook_ad(ad_params)
 
-def mock_ai_processing(description):
-    # Super simple keyword extraction
-    import re
-    params = {
-        'target_audience': 'not specified',
-        'budget': 'not specified',
-        'ad_copy': description # default to full description
+    # Step 3: Combine results and return to frontend
+    response = {
+        'ai_result': ad_params,
+        'facebook_result': facebook_result
     }
 
-    # Example: find budget
-    budget_match = re.search(r'(\d+\s*(?:USD|dollars|\$))', description, re.IGNORECASE)
-    if budget_match:
-        params['budget'] = budget_match.group(1)
-
-    # Example: find audience
-    audience_match = re.search(r'for an audience of\s*([\w\s]+)', description, re.IGNORECASE)
-    if audience_match:
-        potential_audience = audience_match.group(1).strip()
-        params['target_audience'] = potential_audience
-
-    # Example: find ad copy
-    copy_match = re.search(r'the ad copy should be\s*"(.*?)"', description, re.IGNORECASE)
-    if copy_match:
-        params['ad_copy'] = copy_match.group(1)
-
-    return params
+    return jsonify(response)
 
 
 if __name__ == '__main__':
